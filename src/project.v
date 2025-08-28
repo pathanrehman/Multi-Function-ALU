@@ -73,7 +73,7 @@ module tt_um_example (
     assign uio_oe = 8'hFF; // All uio pins as outputs
     
     // Unused input
-    wire _unused = &{ena, 1'b0};
+    wire _unused = &{ena, alu_result[31:16], 1'b0};
 
 endmodule
 
@@ -191,8 +191,7 @@ module cla_32bit (
     output overflow
 );
 
-    wire [7:0] c;
-    wire [7:0] g_group, p_group;
+    wire [8:0] c;  // Extended to 9 bits to avoid index out of range
     
     assign c[0] = cin;
     
@@ -205,9 +204,7 @@ module cla_32bit (
                 .b(b[i*4+3:i*4]),
                 .cin(c[i]),
                 .sum(sum[i*4+3:i*4]),
-                .cout(c[i+1]),
-                .g(g_group[i]),
-                .p(p_group[i])
+                .cout(c[i+1])
             );
         end
     endgenerate
@@ -223,33 +220,29 @@ module cla_4bit (
     input [3:0] b,
     input cin,
     output [3:0] sum,
-    output cout,
-    output g,
-    output p
+    output cout
 );
 
     wire [3:0] gi, pi;
-    wire [3:0] c;
     
     // Generate and propagate for each bit
     assign gi = a & b;
     assign pi = a ^ b;
     
-    // Carry calculations
-    assign c[0] = cin;
-    assign c[1] = gi[0] | (pi[0] & c[0]);
-    assign c[2] = gi[1] | (pi[1] & gi[0]) | (pi[1] & pi[0] & c[0]);
-    assign c[3] = gi[2] | (pi[2] & gi[1]) | (pi[2] & pi[1] & gi[0]) | 
-                  (pi[2] & pi[1] & pi[0] & c[0]);
+    // Carry calculations using non-recursive method
+    wire c1 = gi[0] | (pi[0] & cin);
+    wire c2 = gi[1] | (pi[1] & gi[0]) | (pi[1] & pi[0] & cin);
+    wire c3 = gi[2] | (pi[2] & gi[1]) | (pi[2] & pi[1] & gi[0]) | 
+              (pi[2] & pi[1] & pi[0] & cin);
+    
     assign cout = gi[3] | (pi[3] & gi[2]) | (pi[3] & pi[2] & gi[1]) | 
-                  (pi[3] & pi[2] & pi[1] & gi[0]) | (pi[3] & pi[2] & pi[1] & pi[0] & c[0]);
+                  (pi[3] & pi[2] & pi[1] & gi[0]) | (pi[3] & pi[2] & pi[1] & pi[0] & cin);
     
     // Sum calculation
-    assign sum = pi ^ c;
-    
-    // Group generate and propagate
-    assign g = gi[3] | (pi[3] & gi[2]) | (pi[3] & pi[2] & gi[1]) | (pi[3] & pi[2] & pi[1] & gi[0]);
-    assign p = pi[3] & pi[2] & pi[1] & pi[0];
+    assign sum[0] = pi[0] ^ cin;
+    assign sum[1] = pi[1] ^ c1;
+    assign sum[2] = pi[2] ^ c2;
+    assign sum[3] = pi[3] ^ c3;
 
 endmodule
 
